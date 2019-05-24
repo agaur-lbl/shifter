@@ -373,7 +373,7 @@ class DockerV2Handle(object):
         (_, auth_data_str) = auth_loc_str.split(' ', 2)
 
         auth_data = {}
-        for item in auth_data_str.split(','):
+        for item in filter(None, re.split(r'(\w+=".*?"),', auth_data_str)):
             (key, val) = item.split('=', 2)
             auth_data[key] = val.replace('"', '')
 
@@ -527,7 +527,13 @@ class DockerV2Handle(object):
                     # there was a checksum mismatch, nuke the file
                     os.unlink(filename)
 
-            conn.request("GET", path, None, self.headers)
+            # If the redirect path includes a verify in the path
+            # then we don't need the header.  If try to use the
+            # header, we may get back a 400.
+            if path.find('verify') > 0:
+                conn.request("GET", path, None, {})
+            else:
+                conn.request("GET", path, None, self.headers)
             resp1 = conn.getresponse()
             location = resp1.getheader('location')
             if resp1.status == 200:
@@ -616,6 +622,10 @@ class DockerV2Handle(object):
             # get directory of tar contents
             members = tfp.getmembers()
 
+            # Normalize paths
+            for x in members:
+                if x.name[0:2] == './':
+                    x.name = x.name[2:]
             # remove all illegal files
             members = filter_layer(members, 'dev/')
             members = filter_layer(members, '/')
